@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>ТайКонвертер</title>
+
+<!-- Telegram Mini App SDK -->
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+
+<!-- TON Connect UI -->
+<script src="https://unpkg.com/@tonconnect/ui@latest/dist/tonconnect-ui.min.js"></script>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Unbounded:wght@400;700;900&display=swap" rel="stylesheet">
+
+<style>
+:root {
+  --bg:        #080c14;
+  --surface:   #0f1624;
+  --card:      #141e30;
+  --border:    #1e2d45;
+  --accent:    #00e5ff;
+  --accent2:   #7c3aed;
+  --gold:      #f59e0b;
+  --green:     #00ffa3;
+  --red:       #ff3b5c;
+  --text:      #e2eaf5;
+  --muted:     #4a6080;
+  --font-head: 'Unbounded', sans-serif;
+  --font-mono: 'Space Mono', monospace;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-mono);
+  min-height: 100vh;
+  overflow-x: hidden;
+  padding-bottom: 32px;
+}
+
+/* Grid background */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(0,229,255,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,229,255,0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.wrap { position: relative; z-index: 1; max-width: 480px; margin: 0 auto; padding: 16px; }
+
+/* ── Header ── */
+.hdr {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 0 20px;
+}
+.hdr-title {
+  font-family: var(--font-head);
+  font-size: 18px; font-weight: 900;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  letter-spacing: -0.5px;
+}
+.hdr-flag { font-size: 24px; }
+.pill {
+  font-size: 10px; font-weight: 700; padding: 4px 10px;
+  border-radius: 20px; border: 1px solid; letter-spacing: 0.5px;
+}
+.pill-green { color: var(--green); border-color: rgba(0,255,163,0.3); background: rgba(0,255,163,0.06); }
+.pill-red   { color: var(--red);   border-color: rgba(255,59,92,0.3);  background: rgba(255,59,92,0.06); }
+.pill-gray  { color: var(--muted); border-color: var(--border); }
+
+/* ── Cards ── */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 18px;
+  margin-bottom: 14px;
+  position: relative;
+  overflow: hidden;
+}
+.card::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(0,229,255,0.2), transparent);
+}
+.card-label {
+  font-size: 10px; font-weight: 700; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 14px;
+  display: flex; justify-content: space-between; align-items: center;
+}
+
+/* ── Wallet button ── */
+.wallet-btn {
+  width: 100%; padding: 14px;
+  background: linear-gradient(135deg, #0098ea, #0077c0);
+  color: #fff; border: none; border-radius: 14px;
+  font-family: var(--font-head); font-size: 13px; font-weight: 700;
+  cursor: pointer; transition: all 0.2s;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+.wallet-btn:active { transform: scale(0.97); }
+.wallet-btn.connected { background: linear-gradient(135deg, #00c853, #009624); }
+.wallet-btn.blocked   { background: linear-gradient(135deg, #ff3b5c, #c0002e); cursor: not-allowed; }
+.wallet-btn.checking  { background: linear-gradient(135deg, #f59e0b, #d97706); }
+
+/* ── AML status ── */
+.aml-box {
+  display: none; margin-top: 12px; padding: 12px 14px;
+  border-radius: 12px; font-size: 12px; font-weight: 700;
+  line-height: 1.5; animation: fadeIn 0.3s ease;
+}
+.aml-safe   { background: rgba(0,255,163,0.08); color: var(--green); border: 1px solid rgba(0,255,163,0.2); }
+.aml-danger { background: rgba(255,59,92,0.08);  color: var(--red);   border: 1px solid rgba(255,59,92,0.2); }
+.aml-score-bar { height: 4px; border-radius: 2px; margin-top: 8px; background: var(--border); overflow: hidden; }
+.aml-score-fill { height: 100%; border-radius: 2px; transition: width 0.8s ease; }
+
+/* ── Converter ── */
+.input-row { margin-bottom: 12px; }
+.input-label { font-size: 11px; color: var(--muted); margin-bottom: 6px; font-weight: 700; letter-spacing: 0.5px; }
+.input-wrap { position: relative; }
+.input-wrap input {
+  width: 100%; padding: 14px 56px 14px 16px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; color: var(--text);
+  font-family: var(--font-mono); font-size: 20px; font-weight: 700;
+  outline: none; transition: border-color 0.2s;
+}
+.input-wrap input:focus { border-color: var(--accent); }
+.input-wrap input::placeholder { color: var(--muted); }
+.input-badge {
+  position: absolute; right: 14px; top: 50%; transform: translateY(-50%);
+  color: var(--accent); font-weight: 700; font-size: 14px;
+}
+
+/* ── Results grid ── */
+.results-grid { display: flex; flex-direction: column; gap: 1px; }
+.result-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.result-row:last-child { border-bottom: none; }
+.result-label { color: var(--muted); }
+.result-val { font-weight: 700; font-size: 15px; }
+.val-cyan   { color: var(--accent); }
+.val-green  { color: var(--green); }
+.val-gold   { color: var(--gold); }
+.val-purple { color: #a78bfa; }
+
+/* ── Rate ticker ── */
+.rate-ticker {
+  display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px;
+  scrollbar-width: none; margin-bottom: 14px;
+}
+.rate-ticker::-webkit-scrollbar { display: none; }
+.rate-chip {
+  flex-shrink: 0; background: var(--surface);
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: 6px 10px; font-size: 11px; white-space: nowrap;
+}
+.rate-chip span { color: var(--accent); font-weight: 700; }
+
+/* ── Ads ── */
+.ads-card {
+  background: linear-gradient(135deg, #1a1040, #2d1060);
+  border: 1px solid #4c1d95; border-radius: 20px;
+  padding: 16px; margin-bottom: 14px; position: relative; overflow: hidden;
+}
+.ads-card::before {
+  content: ''; position: absolute;
+  top: -30px; right: -30px; width: 80px; height: 80px;
+  background: radial-gradient(circle, rgba(124,58,237,0.3), transparent 70%);
+}
+.ads-label { font-size: 10px; color: #7c3aed; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px; }
+.ads-text { font-size: 13px; color: #ddd; margin-bottom: 10px; line-height: 1.5; }
+.ads-btn {
+  display: inline-block; padding: 7px 14px;
+  background: rgba(124,58,237,0.2); border: 1px solid #7c3aed;
+  border-radius: 8px; color: #a78bfa; font-size: 12px; font-weight: 700;
+  cursor: pointer; text-decoration: none; transition: all 0.2s;
+}
+.ads-btn:active { background: rgba(124,58,237,0.4); }
+
+/* ── Referral ── */
+.ref-url {
+  background: var(--surface); border: 1px dashed var(--border);
+  border-radius: 10px; padding: 10px 12px;
+  font-family: var(--font-mono); font-size: 12px; color: var(--accent);
+  cursor: pointer; word-break: break-all; margin-top: 10px;
+  transition: border-color 0.2s;
+}
+.ref-url:active { border-color: var(--accent); }
+.ref-stats { display: flex; gap: 12px; margin-top: 12px; }
+.ref-stat {
+  flex: 1; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; padding: 10px; text-align: center;
+}
+.ref-stat-val { font-size: 18px; font-weight: 700; color: var(--green); }
+.ref-stat-lbl { font-size: 10px; color: var(--muted); margin-top: 2px; }
+
+/* ── Toast ── */
+.toast {
+  position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%) translateY(20px);
+  background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+  padding: 10px 18px; font-size: 13px; font-weight: 700;
+  opacity: 0; transition: all 0.3s; z-index: 1000; white-space: nowrap;
+  pointer-events: none;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ── Animations ── */
+@keyframes fadeIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes pulse  { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+.pulsing { animation: pulse 1.2s infinite; }
+
+/* ── Divider ── */
+.divider { height: 1px; background: var(--border); margin: 16px 0; }
+
+/* ── Connected address ── */
+.address-chip {
+  display: none; align-items: center; gap: 6px;
+  background: rgba(0,229,255,0.06); border: 1px solid rgba(0,229,255,0.15);
+  border-radius: 10px; padding: 6px 10px; font-size: 11px;
+  color: var(--accent); margin-top: 10px; word-break: break-all;
+}
+.dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); flex-shrink: 0; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <!-- Header -->
+  <div class="hdr">
+    <div>
+      <div class="hdr-title">ТайКонвертер</div>
+      <div style="font-size:10px;color:var(--muted);margin-top:3px;">v2.0 · AML Shield · TON Web3</div>
+    </div>
+    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
+      <span class="hdr-flag">🇹🇭</span>
+      <span class="pill pill-gray" id="networkPill">Mainnet</span>
+    </div>
+  </div>
+
+  <!-- Live rates ticker -->
+  <div class="rate-ticker" id="rateTicker">
+    <div class="rate-chip">THB/RUB <span id="r1">2.22</span></div>
+    <div class="rate-chip">USDT/THB <span id="r2">34.20</span></div>
+    <div class="rate-chip">TON/USDT <span id="r3">5.25</span></div>
+    <div class="rate-chip">BTC/USDT <span id="r4">—</span></div>
+    <div class="rate-chip">ETH/USDT <span id="r5">—</span></div>
+  </div>
+
+  <!-- Web3 / TON Connect -->
+  <div class="card">
+    <div class="card-label">
+      <span>TON Web3 · Кошелёк</span>
+      <span id="escrowStatus" style="color:var(--muted);">Escrow: OFF</span>
+    </div>
+
+    <button class="wallet-btn" id="walletBtn" onclick="handleWallet()">
+      <span id="walletIcon">💎</span>
+      <span id="walletText">Подключить Tonkeeper</span>
+    </button>
+
+    <div class="address-chip" id="addressChip">
+      <div class="dot"></div>
+      <span id="addressText"></span>
+    </div>
+
+    <!-- AML results -->
+    <div class="aml-box aml-safe" id="amlSafe">
+      🛡️ AML Passed — адрес чист<br>
+      <span style="font-size:11px;font-weight:400;opacity:0.8;" id="amlSafeDetail"></span>
+      <div class="aml-score-bar"><div class="aml-score-fill" id="amlSafeFill" style="background:var(--green);"></div></div>
+    </div>
+    <div class="aml-box aml-danger" id="amlDanger">
+      🚨 AML ALERT — транзакции заблокированы<br>
+      <span style="font-size:11px;font-weight:400;opacity:0.8;" id="amlDangerDetail"></span>
+      <div class="aml-score-bar"><div class="aml-score-fill" id="amlDangerFill" style="background:var(--red);"></div></div>
+    </div>
+  </div>
+
+  <!-- Converter -->
+  <div class="card">
+    <div class="card-label">
+      <span>Конвертер валют</span>
+      <span id="lastUpdate" style="color:var(--muted);">обновлено: —</span>
+    </div>
+
+    <div class="input-row">
+      <div class="input-label">Введи сумму в рублях</div>
+      <div class="input-wrap">
+        <input type="number" id="inputRub" placeholder="0" oninput="calculate()" inputmode="decimal">
+        <span class="input-badge">₽</span>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="results-grid">
+      <div class="result-row">
+        <span class="result-label">🇹🇭 Тайский Бат (THB)</span>
+        <span class="result-val val-cyan" id="outThb">0.00 ฿</span>
+      </div>
+      <div class="result-row">
+        <span class="result-label">💵 USDT (стейблкоин)</span>
+        <span class="result-val val-green" id="outUsdt">0.00 ₮</span>
+      </div>
+      <div class="result-row">
+        <span class="result-label">💎 TON (ликвидность)</span>
+        <span class="result-val val-purple" id="outTon">0.00 TON</span>
+      </div>
+      <div class="result-row">
+        <span class="result-label">⚡ Сплит системы (2%)</span>
+        <span class="result-val val-gold" id="outSplit">0.0000 TON</span>
+      </div>
+      <div class="result-row">
+        <span class="result-label">🤝 Реферальный бонус (1%)</span>
+        <span class="result-val" style="color:#a78bfa;" id="outRef">0.0000 TON</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Ads block -->
+  <div class="ads-card" id="adsBlock">
+    <div class="ads-label">🏝 Партнёрская сеть · Таиланд</div>
+    <div class="ads-text" id="adText">Аренда байков на Пхукете (Rawai / Patong). Скидка 10% по промокоду <strong>TON2025</strong> 🏍</div>
+    <a class="ads-btn" onclick="trackAd()">Узнать подробнее →</a>
+  </div>
+
+  <!-- Referral -->
+  <div class="card">
+    <div class="card-label">
+      <span>On-Chain реферальная система</span>
+      <span class="pill pill-green">1% с обмена</span>
+    </div>
+
+    <div style="font-size:12px;color:var(--muted);line-height:1.6;">
+      Поделись ссылкой — получай 1% с каждого обмена реферала. Связь записывается в TON-блокчейн.
+    </div>
+
+    <div class="ref-url" id="refUrl" onclick="copyRef()">
+      Подключи кошелёк для получения ссылки
+    </div>
+
+    <div class="ref-stats">
+      <div class="ref-stat">
+        <div class="ref-stat-val" id="refCount">0</div>
+        <div class="ref-stat-lbl">Рефералов</div>
+      </div>
+      <div class="ref-stat">
+        <div class="ref-stat-val" id="refEarned">0.00</div>
+        <div class="ref-stat-lbl">TON заработано</div>
+      </div>
+      <div class="ref-stat">
+        <div class="ref-stat-val" id="refVolume">0</div>
+        <div class="ref-stat-lbl">Обменов</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ─── Telegram SDK init ────────────────────────────────────────────────────────
+const tg = window.Telegram?.WebApp;
+if (tg) {
+  tg.ready();
+  tg.expand();
+  tg.setHeaderColor('#080c14');
+  tg.setBackgroundColor('#080c14');
+}
+
+const userId = tg?.initDataUnsafe?.user?.id || 'demo_' + Math.random().toString(36).slice(2,8);
+const userName = tg?.initDataUnsafe?.user?.first_name || 'Пользователь';
+
+// ─── Config ───────────────────────────────────────────────────────────────────
+const CONFIG = {
+  MASTER_WALLET: 'UQDVovL24cC2FmthXZpadJkCTnGS76MW5Mk67ax1noxp1_9Z',
+  CR_THB:        2.22,
+  CR_USDT:       34.20,
+  CR_TON:        5.25,
+  SYSTEM_FEE:    0.02,
+  REF_FEE:       0.01,
+  // TON Connect manifest URL — замени после деплоя
+  MANIFEST_URL:  'https://your-app.vercel.app/tonconnect-manifest.json',
+};
+
+// ─── TON Connect ──────────────────────────────────────────────────────────────
+let tonConnect = null;
+let walletConnected = false;
+let walletAddress = null;
+let amlPassed = false;
+
+function initTonConnect() {
+  try {
+    tonConnect = new TON_CONNECT_UI.TonConnectUI({
+      manifestUrl: CONFIG.MANIFEST_URL,
+    });
+
+    tonConnect.onStatusChange(wallet => {
+      if (wallet) {
+        walletAddress = wallet.account.address;
+        onWalletConnected(walletAddress);
+      } else {
+        onWalletDisconnected();
+      }
+    });
+  } catch(e) {
+    // SDK не загружен — работаем в demo-режиме
+    console.log('TON Connect demo mode');
+  }
+}
+
+async function handleWallet() {
+  if (walletConnected) {
+    // Disconnect
+    if (tonConnect) { try { await tonConnect.disconnect(); } catch(e){} }
+    onWalletDisconnected();
+    return;
+  }
+
+  if (tonConnect) {
+    // Реальное подключение через TON Connect
+    try { await tonConnect.openModal(); } catch(e) { simulateConnect(); }
+  } else {
+    // Demo-режим (если SDK не загружен)
+    simulateConnect();
+  }
+}
+
+function simulateConnect() {
+  // Demo-симуляция для превью
+  const demoAddr = 'UQC7' + Math.random().toString(36).slice(2,8).toUpperCase() + '...TON';
+  runAmlCheck(demoAddr);
+}
+
+function onWalletConnected(address) {
+  runAmlCheck(address);
+}
+
+function onWalletDisconnected() {
+  walletConnected = false;
+  walletAddress = null;
+  amlPassed = false;
+
+  const btn = document.getElementById('walletBtn');
+  btn.className = 'wallet-btn';
+  btn.innerHTML = '<span>💎</span><span>Подключить Tonkeeper</span>';
+
+  document.getElementById('amlSafe').style.display = 'none';
+  document.getElementById('amlDanger').style.display = 'none';
+  document.getElementById('addressChip').style.display = 'none';
+  document.getElementById('escrowStatus').innerText = 'Escrow: OFF';
+  document.getElementById('escrowStatus').style.color = 'var(--muted)';
+  document.getElementById('refUrl').innerText = 'Подключи кошелёк для получения ссылки';
+  showToast('Кошелёк отключён');
+}
+
+// ─── AML Check ────────────────────────────────────────────────────────────────
+async function runAmlCheck(address) {
+  const btn = document.getElementById('walletBtn');
+  btn.className = 'wallet-btn checking pulsing';
+  btn.innerHTML = '<span>🔍</span><span id="walletText">Проверка AML...</span>';
+
+  // Здесь можно подключить реальный AML-провайдер:
+  // AMLBot API: https://amlbot.com/api
+  // Chainalysis: https://docs.chainalysis.com
+  // Elliptic: https://www.elliptic.co
+  //
+  // Пример запроса (требует API-ключ):
+  // const res = await fetch(`https://api.amlbot.com/check?address=${address}&token=TON`, {
+  //   headers: { 'Authorization': 'Bearer YOUR_AMLBOT_KEY' }
+  // });
+  // const data = await res.json();
+  // const riskScore = data.riskScore; // 0–100
+
+  // Demo: симуляция ответа (замени на реальный API)
+  await new Promise(r => setTimeout(r, 1400));
+  const riskScore = Math.floor(Math.random() * 100);
+  const isDirty = riskScore > 60;
+
+  btn.classList.remove('pulsing');
+  document.getElementById('addressChip').style.display = 'flex';
+  document.getElementById('addressText').innerText = address.slice(0,8) + '...' + address.slice(-6);
+
+  if (isDirty) {
+    // AML Failed
+    amlPassed = false;
+    btn.className = 'wallet-btn blocked';
+    btn.innerHTML = '<span>🚫</span><span>Доступ заблокирован</span>';
+    document.getElementById('escrowStatus').innerText = 'Escrow: BLOCKED';
+    document.getElementById('escrowStatus').style.color = 'var(--red)';
+
+    document.getElementById('amlDangerDetail').innerText =
+      `Риск-скор: ${riskScore}% · Обнаружены признаки миксера / даркнет-активности`;
+    document.getElementById('amlDangerFill').style.width = riskScore + '%';
+    document.getElementById('amlDanger').style.display = 'block';
+    document.getElementById('amlSafe').style.display = 'none';
+  } else {
+    // AML Passed
+    amlPassed = true;
+    walletConnected = true;
+    btn.className = 'wallet-btn connected';
+    btn.innerHTML = '<span>✅</span><span>Кошелёк подключён</span>';
+    document.getElementById('escrowStatus').innerText = 'Escrow: ACTIVE';
+    document.getElementById('escrowStatus').style.color = 'var(--green)';
+
+    document.getElementById('amlSafeDetail').innerText =
+      `Риск-скор: ${riskScore}% · Транзакции разрешены`;
+    document.getElementById('amlSafeFill').style.width = riskScore + '%';
+    document.getElementById('amlSafe').style.display = 'block';
+    document.getElementById('amlDanger').style.display = 'none';
+
+    // Активируем реферальную ссылку
+    activateReferral(address);
+  }
+}
+
+// ─── Calculator ───────────────────────────────────────────────────────────────
+function calculate() {
+  const rub = parseFloat(document.getElementById('inputRub').value) || 0;
+  const thb   = rub / CONFIG.CR_THB;
+  const usdt  = thb / CONFIG.CR_USDT;
+  const ton   = usdt / CONFIG.CR_TON;
+  const split = ton * CONFIG.SYSTEM_FEE;
+  const ref   = ton * CONFIG.REF_FEE;
+
+  document.getElementById('outThb').innerText   = fmt(thb, 2)   + ' ฿';
+  document.getElementById('outUsdt').innerText  = fmt(usdt, 2)  + ' ₮';
+  document.getElementById('outTon').innerText   = fmt(ton, 4)   + ' TON';
+  document.getElementById('outSplit').innerText = fmt(split, 4) + ' TON';
+  document.getElementById('outRef').innerText   = fmt(ref, 4)   + ' TON';
+
+  const now = new Date();
+  document.getElementById('lastUpdate').innerText =
+    'обновлено: ' + now.getHours() + ':' + String(now.getMinutes()).padStart(2,'0');
+}
+
+function fmt(n, dec) {
+  return n.toLocaleString('ru', { minimumFractionDigits: dec, maximumFractionDigits: dec });
+}
+
+// ─── Live rates (CoinGecko free API) ──────────────────────────────────────────
+async function fetchRates() {
+  try {
+    const res = await fetch(
+      'https://api.coingecko.com/api/v3/simple/price?ids=the-open-network,tether,bitcoin,ethereum&vs_currencies=usd'
+    );
+    const d = await res.json();
+    if (d['the-open-network']?.usd) {
+      CONFIG.CR_TON = d['the-open-network'].usd;
+      document.getElementById('r3').innerText = d['the-open-network'].usd.toFixed(2);
+    }
+    if (d['bitcoin']?.usd)   document.getElementById('r4').innerText = '$' + Math.round(d['bitcoin'].usd).toLocaleString();
+    if (d['ethereum']?.usd)  document.getElementById('r5').innerText = '$' + Math.round(d['ethereum'].usd).toLocaleString();
+    calculate();
+  } catch(e) { /* offline — используем дефолты */ }
+}
+
+// ─── Ads rotator ──────────────────────────────────────────────────────────────
+const ADS = [
+  { text: 'Аренда байков на Пхукете (Rawai / Patong). Скидка 10% по промокоду <strong>TON2025</strong> 🏍', url: '#' },
+  { text: 'P2P обмен RUB → THB в Бангкоке. Комиссия 0% при оплате TON 💸', url: '#' },
+  { text: 'Виза в Таиланд — помощь с документами. Принимаем USDT / TON 🇹🇭', url: '#' },
+  { text: 'Аренда вилл на Самуи. Первая неделя −15% при бронировании через TON 🏝', url: '#' },
+];
+let adIndex = 0;
+let adClicks = 0;
+
+function rotatAd() {
+  adIndex = (adIndex + 1) % ADS.length;
+  document.getElementById('adText').innerHTML = ADS[adIndex].text;
+}
+
+function trackAd() {
+  adClicks++;
+  showToast('Клик зафиксирован · Реклама #' + (adIndex + 1));
+  // здесь можно отправить аналитику на сервер
+}
+
+// ─── Referral system ──────────────────────────────────────────────────────────
+function activateReferral(address) {
+  const refParam = btoa(address).slice(0, 12);
+  const botName  = 'ton_shield_app_bot';
+  const refLink  = `https://t.me/${botName}?start=ref_${refParam}`;
+  document.getElementById('refUrl').innerText = refLink;
+
+  // Demo stats — в проде тянуть с backend
+  document.getElementById('refCount').innerText  = Math.floor(Math.random() * 8);
+  document.getElementById('refEarned').innerText = (Math.random() * 2).toFixed(2);
+  document.getElementById('refVolume').innerText = Math.floor(Math.random() * 30);
+}
+
+function copyRef() {
+  const txt = document.getElementById('refUrl').innerText;
+  if (txt.startsWith('https')) {
+    navigator.clipboard?.writeText(txt).catch(() => {});
+    showToast('Ссылка скопирована! 🔗');
+  }
+}
+
+// ─── Toast ────────────────────────────────────────────────────────────────────
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.innerText = msg;
+  t.classList.add('show');
+  clearTimeout(window._toastTimer);
+  window._toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  initTonConnect();
+  fetchRates();
+  setInterval(rotatAd, 8000);
+  setInterval(fetchRates, 60000);
+
+  // Читаем реферальный параметр из Telegram start_param
+  const startParam = tg?.initDataUnsafe?.start_param || '';
+  if (startParam.startsWith('ref_')) {
+    showToast('Реферальная ссылка активирована ✅');
+    // здесь записываем связь инвайтер→реферал на бэкенде
+  }
+});
+</script>
+</body>
+</html>
