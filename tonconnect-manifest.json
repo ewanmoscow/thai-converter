@@ -1,7 +1,7 @@
 {
-  "url": "https://your-app.vercel.app",
+  "url": "https://thai-converter.vercel.app",
   "name": "ТайКонвертер · @ton_shield_app_bot",
-  "iconUrl": "https://your-app.vercel.app/icon.png",
-  "termsOfUseUrl": "https://your-app.vercel.app/terms",
-  "privacyPolicyUrl": "https://your-app.vercel.app/privacy"
+  "iconUrl": "https://thai-converter.vercel.app/icon.png",
+  "termsOfUseUrl": "https://thai-converter.vercel.app/terms",
+  "privacyPolicyUrl": "https://thai-converter.vercel.app/privacy"
 }
